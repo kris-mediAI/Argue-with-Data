@@ -1,0 +1,7 @@
+pandas
+pydantic>=2
+google-genai
+streamlit
+plotly
+python-dotenv
+pytest
