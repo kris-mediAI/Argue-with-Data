@@ -2,44 +2,39 @@
 
 > You compute every number the audience sees. Pure pandas, no LLM.
 
-**Owns:** `analysis/`, `fixtures/evidence/`, `tests/test_analysis.py`
-**Read first:** [PLAN.md](PLAN.md) and `models/schemas.py`
+**Owns:** `analysis/`, `tools/`, `fixtures/evidence/`, `tests/test_analysis.py` · **Branch:** `p1-analysis`
+**Read first:** [PLAN.md](PLAN.md), `models/schemas.py`, [AGENTS.md](../../AGENTS.md)
 
-## 0:00–0:45 · Unblock everyone
+## Unblock everyone (by 0:45)
 
-1. Hand-write `fixtures/evidence/<tool>.json` for each tool below, using the hero story (Customer X about 8%, Premium about 67%). P3 and P4 build against these.
-2. Write `TOOL_SPECS` in `analysis/tools.py`: name, one-line description, args, and **what `measure` means** for each tool. P3 pastes this into the Gemini prompt.
+1. `fixtures/evidence/<tool>.json`: one sample Evidence per tool, using the hero story.
+2. `TOOL_SPECS` in `tools/registry.py`: each tool's name, description, args, and what its `measure` means. P3 puts this in the Gemma prompt.
 
-## 0:45–2:00 · Build the tools
+## Tools (by 2:00)
 
-Every tool: `tool(df, metric, period_a, period_b, **args) -> Evidence`. Periods are `"YYYY-MM"`. `measure = part_change / total_change`, signed, not clipped. If `total_change == 0`, return `status="error"`.
+Every tool takes `(df, metric, period_a, period_b, **args)` and returns `Evidence`. Periods are `"YYYY-MM"`. `measure = part_change / total_change`, signed. If `total_change == 0`, return `status="error"`.
 
-1. **`profile(df) -> dict`** (`analysis/profiler.py`): rows, column types, date column (parse once, add `_month` as `"YYYY-MM"`), metric and dimension candidates, missing %, duplicates, available months.
-2. **`compare_periods`**: before, after, abs_change, pct_change. `measure=None` (it's the headline, not a test).
-3. **`breakdown(dimension, focus=None)`**: per-member before, after, change, share_of_change, sorted. `measure` = the focus member's share, or the top member's share. Used for product and region.
-4. **`customer_bridge(entity="customer", focus=None)`**: lost + new + shrinking + growing customers, **adding up exactly to the total change**. `measure` = lost share, or the focus customer's share (for the user's "it's Customer X" theory).
-5. **`data_quality`**: missing values, duplicates, days with no rows per period. `measure` = estimated revenue gap from missing days ÷ total change.
-6. **`trend`**: if there are fewer than 13 months of data, return `status="untestable"` with a reason the UI can show: *"Only 3 months of data. Testing seasonality needs the same months from an earlier year."* That's all it needs today.
-7. **`run_tool(df, tool, args)`** in `analysis/tools.py`: `TOOL_REGISTRY` lookup, rejects unknown tools, args and columns. **Never raises**; returns `Evidence(status="error", reason=...)`.
-8. **`judge`** in `analysis/judge.py`:
-   ```python
-   def judge(c: Contract, ev: Evidence) -> Label:
-       if ev.status != "ok" or ev.measure is None:
-           return "UNTESTABLE"
-       if ev.measure >= c.support_at_least:
-           return "SUPPORTED"
-       if ev.measure < c.reject_below:
-           return "REJECTED"
-       return "WEAKENED"
-   ```
+| Tool (registry key) | File | Tests the hypothesis | measure |
+|---|---|---|---|
+| `compare_periods` | `analysis/comparisons.py` | (baseline) | None |
+| `breakdown` | `analysis/comparisons.py` | region, product | focus member's share, or the top member's |
+| `contribution` | `analysis/contributions.py` | customer churn, a specific customer | lost customers' share, or the focus customer's |
+| `mix` | `analysis/mix_analysis.py` | product mix shift | mix effect's share (price-volume-mix) |
+| `order_volume` | `analysis/comparisons.py` | order volume | share explained by the change in order count |
+| `trend` | `analysis/trends.py` | seasonality | untestable without the same months a year earlier |
+| `data_quality` | `analysis/data_quality.py` | data problems | artificial change ÷ total change |
+| `drilldown` | `analysis/comparisons.py` | critic follow-ups | top-5 members' share of one segment's change |
 
-**By 2:00:** `run_tool` and `judge` work on `data/hero.csv`, and the numbers match `data/answer_key.json`.
+Also:
+- `profile(df)` in `analysis/profiling.py`
+- `run_tool(df, tool, args)` in `tools/registry.py`. It validates the tool, args, columns and periods, and **never raises**.
+- `verify(contract, evidence)` in `analysis/verify.py`: checks that parts add up and the periods exist, returning a list of problems.
+- `judge(contract, evidence)` in `analysis/judge.py`
 
-## 2:00–4:15 · Harden and stretch
+## After 2:00
 
-- `tests/test_analysis.py`: the customer bridge adds up to the total change; each `judge` branch.
-- Stretch, only if on schedule at 3:30: **`drilldown(segment_dim, segment_value, inner_dim)`**. It's `breakdown` filtered to one segment (e.g. Premium by customer), with `measure` = the top-5 members' share. The critic uses it to show the premium drop is spread across many customers, so it isn't churn in disguise.
+Tests in `tests/test_analysis.py`. Then check every number against P2's `data/answer_key.json`.
 
 ## On stage
 
-You answer "Where do the numbers come from?" Be ready to show one calculation by hand.
+You answer "Where do the numbers come from?"

@@ -1,6 +1,8 @@
-pandas
-pydantic>=2
+langgraph
 google-genai
+pandas
+numpy
+pydantic>=2
 streamlit
 plotly
 python-dotenv
